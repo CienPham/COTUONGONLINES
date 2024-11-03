@@ -1,0 +1,210 @@
+﻿body {
+    background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #fff;
+}
+
+.container {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.game-container {
+    display: flex;
+    gap: 2rem;
+    justify-content: center;
+    align-items: start;
+}
+
+.chessboard {
+    width: 850px;
+    height: 850px;
+    background-image: url("/Images/bancotuong.jpg");
+    position: relative;
+    border: 4px solid #8b4513;
+    border-radius: 15px;
+    box-shadow: 0 0 30px rgba(139, 69, 19, 0.3);
+    transition: transform 0.3s ease;
+}
+
+    .chessboard:hover {
+        transform: scale(1.01);
+    }
+
+.chessnode {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+    .chessnode:hover {
+        transform: scale(1.1);
+        filter: brightness(1.2);
+    }
+
+    .chessnode:active {
+        transform: scale(0.95);
+    }
+
+.chessimgnode {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.game-sidebar {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    padding: 1.5rem;
+    width: 400px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.room-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.btn {
+    padding: 0.8rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.btn-primary {
+    background: linear-gradient(45deg, #4a90e2, #357abd);
+    color: white;
+}
+
+.btn-success {
+    background: linear-gradient(45deg, #2ecc71, #27ae60);
+    color: white;
+}
+
+.btn-danger {
+    background: linear-gradient(45deg, #e74c3c, #c0392b);
+    color: white;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.btn:active {
+    transform: translateY(1px);
+}
+
+.form-control {
+    padding: 0.8rem 1rem;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+    transition: all 0.3s ease;
+}
+
+    .form-control:focus {
+        outline: none;
+        border-color: #4a90e2;
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+#messages {
+    height: 300px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+    padding: 1rem;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+    color: #fff;
+}
+
+    #messages p {
+        padding: 0.5rem 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 5px;
+        margin: 0.5rem 0;
+        animation: fadeIn 0.5s ease;
+    }
+
+.ai-thinking {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    padding: 10px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    border-radius: 5px;
+}
+
+.message-input {
+    display: flex;
+    gap: 0.5rem;
+}
+
+    .message-input input {
+        flex: 1;
+    }
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animated-piece {
+    animation: movePiece 0.3s ease;
+}
+
+@keyframes movePiece {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}

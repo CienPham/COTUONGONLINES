@@ -1,0 +1,132 @@
+﻿@{
+    ViewData["Title"] = "Chess Game";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <title>@ViewData["Title"]</title>
+</head>
+<body>
+    <div class="container">
+        <header class="game-header">
+            <h1><i class="fas fa-chess"></i> GAME CỜ TƯỚNG</h1>
+            <div class="game-status">
+                <span id="statusIndicator" class="status-indicator"></span>
+                <span id="statusText">Waiting for opponent...</span>
+            </div>
+        </header>
+
+        <div class="game-container">
+            <!-- Chess Board -->
+            <div id="app">
+                <div class="chessboard-wrapper">
+                    <div class="chessboard">
+                        <div v-for="item in chessNode"
+                             class="chessnode"
+                             :class="{ 'animated-piece': item.isMoving }"
+                             v-on:dragstart="dragStart"
+                             v-on:dragend="dragEnd"
+                             :id="item.id"
+                             v-bind:style="{ display: item.visible, top: item.top + 'px', left: item.left + 'px' }">
+                            <img :src="'/' + item.src" 
+                                 class="chessimgnode" 
+                                 draggable="true" />
+                        </div>
+                    </div>
+                    
+                    <!-- Game Controls -->
+                    <div class="game-controls">
+                        <button class="btn btn-control" title="Undo Move">
+                            <i class="fas fa-undo"></i>
+                        </button>
+                        <button class="btn btn-control" title="Reset Game">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="game-sidebar">
+                <!-- Players Info -->
+                <div class="sidebar-section players-section">
+                    <div class="player-info current-player">
+                        <div class="player-avatar">
+                            <i class="fas fa-user-circle"></i>
+                        </div>
+                        <div class="player-details">
+                            <h3>Player 1</h3>
+                            <span class="status-badge online">Online</span>
+                        </div>
+                    </div>
+                    <div class="versus-divider">VS</div>
+                    <div class="player-info opponent">
+                        <div class="player-avatar">
+                            <i class="fas fa-user-circle"></i>
+                        </div>
+                        <div class="player-details">
+                            <h3>Player 2</h3>
+                            <span class="status-badge offline">Waiting...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Room Controls -->
+                <div class="sidebar-section">
+                    <div class="room-controls">
+                        <button class="btn btn-primary btn-block" id="createRoom">
+                            <i class="fas fa-plus-circle"></i> Create Room
+                        </button>
+                        
+                        <div class="room-join-group">
+                            <input type="text" 
+                                   id="roomIdInput" 
+                                   class="form-control" 
+                                   placeholder="Enter Room ID">
+                            
+                            <div class="btn-group">
+                                <button class="btn btn-success" id="joinRoom">
+                                    <i class="fas fa-sign-in-alt"></i> Join
+                                </button>
+                                <button class="btn btn-danger" id="leaveRoom">
+                                    <i class="fas fa-sign-out-alt"></i> Leave
+                                </button>
+                                 <button class="btn btn-info" id="playWithAI">
+                                    <i class="fas fa-sign-out-alt"></i> Play with AI
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Section -->
+                <div class="sidebar-section">
+                    <div class="chat-container">
+                        <div id="messages" class="messages-container">
+                            <!-- Messages will be inserted here -->
+                        </div>
+                        <div class="message-input">
+                            <input type="text" 
+                                   id="messageInput" 
+                                   class="form-control" 
+                                   placeholder="Type your message...">
+                            <button class="btn btn-primary" id="sendMessage">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.10/dist/vue.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.19.0/axios.min.js"></script>
+</body>
+</html>
