@@ -67,7 +67,12 @@
                         </div>
                     </div>
                 </div>
-
+                <!-- Reload Chess Board Button -->
+                <button id="resetBoard" class="btn btn-primary">Tải lại bàn cờ</button>
+                <!-- Nút Hướng dẫn chơi cờ -->
+                <button class="btn btn-secondary" id="guideButton">
+                    <i class="fas fa-book"></i> Hướng dẫn chơi cờ
+                </button>
                 <!-- Chat Section -->
                 <div class="sidebar-section">
                     <div class="chat-container">
@@ -88,9 +93,52 @@
             </div>
         </div>
     </div>
-
+    <div id="guideModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="closeGuide">&times;</span>
+            <h2>Hướng dẫn chơi cờ</h2>
+            <p>Đây là hướng dẫn cơ bản về cách chơi cờ tướng:</p>
+            <ul>
+                <li>Mục tiêu của trò chơi là chiếu bí vua của đối thủ.</li>
+                <li>Mỗi quân cờ di chuyển theo quy tắc riêng của nó:</li>
+                <ul>
+                    <li><strong>Xe:</strong> Di chuyển ngang hoặc dọc không giới hạn khoảng cách.</li>
+                    <li><strong>Mã:</strong> Di chuyển theo hình chữ L (2 ô theo một hướng và 1 ô vuông sang bên).</li>
+                    <li><strong>Tượng:</strong> Di chuyển chéo 2 ô và không được đi qua quân cờ khác.</li>
+                    <li><strong>Pháo:</strong> Di chuyển giống như xe nhưng cần một quân cờ khác để ăn.</li>
+                    <li><strong>Sĩ:</strong> Di chuyển chéo 1 ô và chỉ có thể nằm trong khu vực của mình.</li>
+                    <li><strong>Tướng:</strong> Di chuyển 1 ô theo chiều ngang hoặc dọc và cũng chỉ có thể nằm trong khu vực của mình.</li>
+                </ul>
+                <li>Bạn cần bảo vệ tướng của mình và tấn công tướng của đối thủ.</li>
+                <li>Các quân cờ không được di chuyển ra ngoài khu vực quy định của mình (trong cung).</li>
+                <li>Người chơi lần lượt đi, không được đi hai lần liên tiếp.</li>
+                <li>Khi một quân cờ bị ăn, nó sẽ bị loại khỏi bàn cờ.</li>
+                <li>Khi tướng của bạn bị chiếu, bạn phải có nước đi để cứu tướng hoặc bạn sẽ thua.</li>
+                <li>Các quân cờ khác nhau có thể được sử dụng với chiến lược khác nhau để tạo lợi thế cho người chơi.</li>
+                <!-- Bạn có thể thêm các quy tắc khác ở đây -->
+            </ul>
+        </div>
+    </div>
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/vue@2.6.10/dist/vue.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.19.0/axios.min.js"></script>
+    <script>
+        document.getElementById("guideButton").addEventListener("click", function () {
+            document.getElementById("guideModal").style.display = "block";
+        });
+
+        // Đóng Modal khi nhấn vào nút đóng (x)
+        document.getElementById("closeGuide").addEventListener("click", function () {
+            document.getElementById("guideModal").style.display = "none";
+        });
+
+        // Đóng Modal khi nhấn ra ngoài khu vực Modal
+        window.addEventListener("click", function (event) {
+            const modal = document.getElementById("guideModal");
+            if (event.target === modal) {
+                modal.style.display = "none";
+            }
+        });
+    </script>
 </body>
 </html>

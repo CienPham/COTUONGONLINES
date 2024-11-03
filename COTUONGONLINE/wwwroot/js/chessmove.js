@@ -1,4 +1,4 @@
-﻿// Kết nối đến SignalR
+﻿
 const connection = new signalR.HubConnectionBuilder()
     .withUrl("/roomHub")
     .build();
@@ -35,7 +35,35 @@ var app = new Vue({
 
         aiColor: 'do' // Màu mặc định của AI là đỏ
     },
+
     methods: {
+        // Thêm method này vào danh sách methods hiện có
+        resetBoard() {
+            // Reset trạng thái game
+            this.gameOver = false;
+            this.winner = null;
+            this.isRedKingAlive = true;
+            this.isBlackKingAlive = true;
+            this.currentTurn = 'do';
+
+            // Reset vị trí tất cả quân cờ về vị trí ban đầu
+            this.chessNode.forEach(node => {
+                const piece = document.getElementById(node.id);
+                if (piece) {
+                    // Hiển thị lại quân cờ nếu đã bị ẩn
+                    piece.style.display = "block";
+                    // Di chuyển về vị trí ban đầu
+                    piece.style.top = node.top + 'px';
+                    piece.style.left = node.left + 'px';
+
+                    // Cập nhật ma trận
+                    const position = this.getIndexByTopLef(node.top, node.left, matrix);
+                    if (position) {
+                        matrix[position.i][position.j].id = node.id;
+                    }
+                }
+            });
+        },
         // Thêm hàm isPathClear
         isPathClear(nodeStart, nodeEnd, matrix) {
             // Kiểm tra đường đi ngang
@@ -444,6 +472,7 @@ var app = new Vue({
 
 
 
+
         getValidMoves(piece, position, board) {
             const moves = [];
             const { i: startI, j: startJ } = position;
@@ -591,6 +620,717 @@ var app = new Vue({
 
             return moves;
         },
+
+
+        // Đánh giá điểm của bàn cờ
+        // Đánh giá bàn cờ với trọng số và các yếu tố chiến thuật
+        evaluateBoard(board, depth) {
+            const cacheKey = this.getBoardHash(board) + depth;
+            if (evaluationCache.has(cacheKey)) {
+                return evaluationCache.get(cacheKey);
+            }
+
+            let score = 0;
+            let redMaterial = 0;
+            let blackMaterial = 0;
+            let redMobility = 0;
+            let blackMobility = 0;
+            let redControl = 0;
+            let blackControl = 0;
+
+            // Phân tích vật chất và vị trí
+            for (let i = 0; i < 10; i++) {
+                for (let j = 0; j < 9; j++) {
+                    const piece = board[i][j];
+                    if (!piece.id) continue;
+
+                    const isRed = piece.id.includes('do');
+                    const pieceType = piece.id.replace('do', '').replace('den', '');
+                    const baseValue = pieceValues[pieceType] || 0;
+
+                    // Tính điểm vật chất
+                    const materialScore = baseValue + this.getPositionalBonus(pieceType, { i, j }, isRed);
+                    if (isRed) {
+                        redMaterial += materialScore;
+                        redMobility += this.calculateMobility(board, { i, j }, true);
+                        redControl += this.calculateControl(board, { i, j }, true);
+                    } else {
+                        blackMaterial += materialScore;
+                        blackMobility += this.calculateMobility(board, { i, j }, false);
+                        blackControl += this.calculateControl(board, { i, j }, false);
+                    }
+                }
+            }
+
+            // Tổng hợp điểm với trọng số
+            score = (redMaterial - blackMaterial) * 1.0 +  // Trọng số vật chất
+                (redMobility - blackMobility) * 0.1 +  // Trọng số tính cơ động
+                (redControl - blackControl) * 0.2;      // Trọng số kiểm soát
+
+            // Thưởng cho giai đoạn cuối game
+            if (this.isEndgame(redMaterial, blackMaterial)) {
+                score += this.evaluateEndgame(board, redMaterial > blackMaterial);
+            }
+
+            // Cache kết quả
+            evaluationCache.set(cacheKey, score);
+            return score;
+        },
+
+        // Tính toán khả năng di chuyển của quân cờ
+        calculateMobility(board, pos, isRed) {
+            const piece = board[pos.i][pos.j];
+            const moves = this.getValidMoves(piece, pos, board);
+            return moves.length;
+        },
+
+        // Tính toán mức độ kiểm soát ô trên bàn cờ
+        calculateControl(board, pos, isRed) {
+            const piece = board[pos.i][pos.j];
+            const moves = this.getValidMoves(piece, pos, board);
+            let control = 0;
+
+            for (const move of moves) {
+                // Kiểm soát trung tâm được thưởng điểm cao hơn
+                const centerBonus = this.isCentralSquare(move) ? 2 : 1;
+                control += centerBonus;
+
+                // Thưởng thêm cho việc kiểm soát các ô quan trọng
+                if (this.isKeySquare(move, isRed)) {
+                    control += 3;
+                }
+            }
+
+            return control;
+        },
+
+        // Kiểm tra ô có phải trung tâm
+        isCentralSquare(pos) {
+            return pos.i >= 3 && pos.i <= 6 && pos.j >= 3 && pos.j <= 5;
+        }
+        ,
+        // Kiểm tra ô quan trọng (gần tướng đối phương)
+        isKeySquare(pos, isRed) {
+            if (isRed) {
+                return pos.i <= 2 && pos.j >= 3 && pos.j <= 5;
+            } else {
+                return pos.i >= 7 && pos.j >= 3 && pos.j <= 5;
+            }
+        },
+
+        // Đánh giá giai đoạn cuối
+        evaluateEndgame(board, isRedWinning) {
+            let score = 0;
+            const winningKingPos = this.findKingPosition(board, isRedWinning);
+            const losingKingPos = this.findKingPosition(board, !isRedWinning);
+
+            // Thưởng cho việc đẩy vua đối phương vào góc
+            score += this.evaluateKingSafety(losingKingPos, !isRedWinning) * -2;
+
+            // Thưởng cho khoảng cách giữa hai vua
+            const kingDistance = this.getManhattanDistance(winningKingPos, losingKingPos);
+            score += (14 - kingDistance) * 10;
+
+            return score;
+        },
+
+        // Hàm tính điểm vị trí quân cờ
+        getPositionalBonus(pieceType, position, isRed) {
+            // Tính điểm dựa trên vị trí cho từng loại quân cờ (giá trị mẫu)
+            const positionValues = {
+                'totdo': [
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, -2, 0, 4, 0, -2, 0, 0],
+                    [2, 0, 8, 0, 8, 0, 8, 0, 2],
+                    [6, 12, 18, 18, 20, 18, 18, 12, 6],
+                    [10, 20, 30, 34, 40, 34, 30, 20, 10],
+                    [14, 26, 42, 60, 80, 60, 42, 26, 14],
+                    [18, 36, 56, 80, 120, 80, 56, 36, 18],
+                    [0, 3, 6, 9, 12, 9, 6, 3, 0]
+                ],
+                'totden': [
+                    [0, 3, 6, 9, 12, 9, 6, 3, 0],
+                    [18, 36, 56, 80, 120, 80, 56, 36, 18],
+                    [14, 26, 42, 60, 80, 60, 42, 26, 14],
+                    [10, 20, 30, 34, 40, 34, 30, 20, 10],
+                    [6, 12, 18, 18, 20, 18, 18, 12, 6],
+                    [2, 0, 8, 0, 8, 0, 8, 0, 2],
+                    [0, 0, -2, 0, 4, 0, -2, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0]
+                ],
+                'mado': [
+                    [0, -4, 0, 0, 0, 0, 0, -4, 0],
+                    [0, 2, 4, 4, -2, 4, 4, 2, 0],
+                    [4, 2, 8, 8, 4, 8, 8, 2, 4],
+                    [2, 6, 8, 6, 10, 6, 8, 6, 2],
+                    [4, 12, 16, 14, 12, 14, 16, 12, 4],
+                    [6, 16, 14, 18, 16, 18, 14, 16, 6],
+                    [8, 24, 18, 24, 20, 24, 18, 24, 8],
+                    [12, 14, 16, 20, 18, 20, 16, 14, 12],
+                    [4, 10, 28, 16, 8, 16, 28, 10, 4],
+                    [4, 8, 16, 12, 4, 12, 16, 8, 4]
+                ],
+                'maden': [
+                    [4, 8, 16, 12, 4, 12, 16, 8, 4],
+                    [4, 10, 28, 16, 8, 16, 28, 10, 4],
+                    [12, 14, 16, 20, 18, 20, 16, 14, 12],
+                    [8, 24, 18, 24, 20, 24, 18, 24, 8],
+                    [6, 16, 14, 18, 16, 18, 14, 16, 6],
+                    [4, 12, 16, 14, 12, 14, 16, 12, 4],
+                    [2, 6, 8, 6, 10, 6, 8, 6, 2],
+                    [4, 2, 8, 8, 4, 8, 8, 2, 4],
+                    [0, 2, 4, 4, -2, 4, 4, 2, 0],
+                    [0, -4, 0, 0, 0, 0, 0, -4, 0]
+                ],
+                'xedo': [
+                    [-2, 10, 6, 14, 12, 14, 6, 10, -2],
+                    [8, 4, 8, 16, 8, 16, 8, 4, 8],
+                    [4, 8, 6, 14, 12, 14, 6, 8, 4],
+                    [6, 10, 8, 14, 14, 14, 8, 10, 6],
+                    [12, 16, 14, 20, 20, 20, 14, 16, 12],
+                    [12, 14, 12, 18, 18, 18, 12, 14, 12],
+                    [12, 18, 16, 22, 22, 22, 16, 18, 12],
+                    [12, 12, 12, 18, 18, 18, 12, 12, 12],
+                    [16, 20, 18, 24, 26, 24, 18, 20, 16],
+                    [14, 14, 12, 18, 16, 18, 12, 14, 14]
+                ],
+                'xeden': [
+                    [14, 14, 12, 18, 16, 18, 12, 14, 14],
+                    [16, 20, 18, 24, 26, 24, 18, 20, 16],
+                    [12, 12, 12, 18, 18, 18, 12, 12, 12],
+                    [12, 18, 16, 22, 22, 22, 16, 18, 12],
+                    [12, 14, 12, 18, 18, 18, 12, 14, 12],
+                    [12, 16, 14, 20, 20, 20, 14, 16, 12],
+                    [6, 10, 8, 14, 14, 14, 8, 10, 6],
+                    [4, 8, 6, 14, 12, 14, 6, 8, 4],
+                    [8, 4, 8, 16, 8, 16, 8, 4, 8],
+                    [-2, 10, 6, 14, 12, 14, 6, 10, -2]
+                ],
+                'phaodo': [
+                    [0, 0, 2, 6, 6, 6, 2, 0, 0],
+                    [0, 2, 4, 6, 6, 6, 4, 2, 0],
+                    [4, 0, 8, 6, 10, 6, 8, 0, 4],
+                    [0, 0, 0, 2, 4, 2, 0, 0, 0],
+                    [-2, 0, 0, 0, 0, 0, 0, 0, -2],
+                    [-2, 0, 0, 0, 0, 0, 0, 0, -2],
+                    [0, 0, 0, 2, 4, 2, 0, 0, 0],
+                    [4, 0, 8, 6, 10, 6, 8, 0, 4],
+                    [0, 2, 4, 6, 6, 6, 4, 2, 0],
+                    [0, 0, 2, 6, 6, 6, 2, 0, 0]
+                ],
+                'phaoden': [
+                    [0, 0, 2, 6, 6, 6, 2, 0, 0],
+                    [0, 2, 4, 6, 6, 6, 4, 2, 0],
+                    [4, 0, 8, 6, 10, 6, 8, 0, 4],
+                    [0, 0, 0, 2, 4, 2, 0, 0, 0],
+                    [-2, 0, 0, 0, 0, 0, 0, 0, -2],
+                    [-2, 0, 0, 0, 0, 0, 0, 0, -2],
+                    [0, 0, 0, 2, 4, 2, 0, 0, 0],
+                    [4, 0, 8, 6, 10, 6, 8, 0, 4],
+                    [0, 2, 4, 6, 6, 6, 4, 2, 0],
+                    [0, 0, 2, 6, 6, 6, 2, 0, 0]
+                ]
+            };
+            return positionValues[pieceType] || 0;
+        },
+        // Hàm đánh giá mối đe dọa (tấn công và phòng thủ)
+        evaluateThreats(board, position, isRed) {
+            let threatScore = 0;
+            const opponentColor = isRed ? 'den' : 'do';
+
+            // Kiểm tra các nước đi của đối thủ để xác định quân nào đang bị đe dọa
+            const opponentMoves = this.getAllMoves(board, opponentColor);
+            for (const move of opponentMoves) {
+                if (move.to.i === position.i && move.to.j === position.j) {
+                    threatScore -= 10;  // Bị đe dọa
+                }
+            }
+
+            return threatScore;
+        },
+
+        // Hàm lấy tất cả nước đi của một bên
+        getAllMoves(board, color) {
+            let allMoves = [];
+            for (let i = 0; i < 10; i++) {
+                for (let j = 0; j < 9; j++) {
+                    const piece = board[i][j];
+                    if (piece.id && piece.id.includes(color)) {
+                        const moves = this.getValidMoves(piece, { i, j }, board);
+                        allMoves = allMoves.concat(moves.map(move => ({ from: { i, j }, to: move })));
+                    }
+                }
+            }
+            return allMoves;
+        },
+
+        // Tìm vị trí vua
+        findKingPosition(board, isRed) {
+            const kingId = isRed ? 'chutuongdo' : 'chutuongden';
+            for (let i = 0; i < 10; i++) {
+                for (let j = 0; j < 9; j++) {
+                    if (board[i][j].id === kingId) {
+                        return { i, j };
+                    }
+                }
+            }
+            return null;
+        },
+
+        // Tính khoảng cách Manhattan
+        getManhattanDistance(pos1, pos2) {
+            if (!pos1 || !pos2) {
+                console.error("One of the positions is null:", pos1, pos2);
+                return 0; // Hoặc giá trị mặc định mà bạn muốn
+            }
+            return Math.abs(pos1.i - pos2.i) + Math.abs(pos1.j - pos2.j);
+        },
+
+        // Đánh giá an toàn của vua
+        evaluateKingSafety(kingPos, isRed) {
+            // Kiểm tra xem kingPos có phải là null không
+            if (!kingPos) {
+                console.error("King position is null.");
+                return 0; // Hoặc giá trị an toàn mặc định
+            }
+            console.log("King Position:", kingPos);
+
+            let safety = 0;
+            const centerJ = 4;
+
+            // Khuyến khích vua ở sau các quân khác
+            safety += isRed ? (9 - kingPos.i) : kingPos.i;
+
+            // Khuyến khích vua ở gần trung tâm ngang
+            safety += 4 - Math.abs(kingPos.j - centerJ);
+
+            return safety;
+        },
+
+        // Kiểm tra giai đoạn cuối
+        isEndgame(redMaterial, blackMaterial) {
+            const totalMaterial = redMaterial + blackMaterial;
+            return totalMaterial < (pieceValues.xe * 4);  // Ví dụ: ít hơn 4 xe
+        },
+
+        // Tạo hash của bàn cờ để cache
+        getBoardHash(board) {
+            return board.map(row => row.map(cell => cell.id).join('')).join('');
+        },
+
+        //// Minimax với alpha-beta pruning và move ordering
+        //minimax(board, depth, alpha, beta, maximizingPlayer, color) {
+        //    // Base cases
+        //    if (depth === 0 || this.checkVictory(board)) {
+        //            return this.evaluateBoard(board, depth);
+        //        }
+
+        //        const moves = this.getAllMovesOrdered(board, color);
+
+        //        if (maximizingPlayer) {
+        //            let maxEval = -Infinity;
+        //            for (const move of moves) {
+        //                const newBoard = this.makeMove(board, move);
+        //                const evalScore = this.minimax(newBoard, depth - 1, alpha, beta, false, this.getOppositeColor(color));
+        //                maxEval = Math.max(maxEval, evalScore);
+        //                alpha = Math.max(alpha, evalScore);
+        //                if (beta <= alpha) break;  // Alpha-beta cut-off
+        //            }
+        //            return maxEval;
+        //        } else {
+        //            let minEval = Infinity;
+        //            for (const move of moves) {
+        //                const newBoard = this.makeMove(board, move);
+        //                const evalScore = this.minimax(newBoard, depth - 1, alpha, beta, true, this.getOppositeColor(color));
+        //                minEval = Math.min(minEval, evalScore);
+        //                beta = Math.min(beta, evalScore);
+        //                if (beta <= alpha) break;  // Alpha-beta cut-off
+        //            }
+        //            return minEval;
+        //        }
+        //    },
+        // Cập nhật hàm minimax để sử dụng đánh giá mới
+        minimax(board, depth, alpha, beta, maximizingPlayer, color) {
+            if (depth === 0 || this.isCheckmate(board, color === 'do')) {
+                return this.evaluateBoardWithCheck(board, depth);
+            }
+
+            const moves = this.getAllMovesOrdered(board, color);
+            const legalMoves = moves.filter(move =>
+                this.doesMovePreventCheck(board, move, color === 'do')
+            );
+
+            if (maximizingPlayer) {
+                let maxEval = -Infinity;
+                for (const move of legalMoves) {
+                    const newBoard = this.makeMove(board, move);
+                    const evalScore = this.minimax(
+                        newBoard,
+                        depth - 1,
+                        alpha,
+                        beta,
+                        false,
+                        this.getOppositeColor(color)
+                    );
+                    maxEval = Math.max(maxEval, evalScore);
+                    alpha = Math.max(alpha, evalScore);
+                    if (beta <= alpha) break;
+                }
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                for (const move of legalMoves) {
+                    const newBoard = this.makeMove(board, move);
+                    const evalScore = this.minimax(
+                        newBoard,
+                        depth - 1,
+                        alpha,
+                        beta,
+                        true,
+                        this.getOppositeColor(color)
+                    );
+                    minEval = Math.min(minEval, evalScore);
+                    beta = Math.min(beta, evalScore);
+                    if (beta <= alpha) break;
+                }
+                return minEval;
+            }
+        },
+        // Lấy tất cả nước đi và sắp xếp theo độ ưu tiên
+        getAllMovesOrdered(board, color) {
+            const moves = [];
+            for (let i = 0; i < 10; i++) {
+                for (let j = 0; j < 9; j++) {
+                    const piece = board[i][j];
+                    if (piece.id && piece.id.includes(color)) {
+                        const pieceMoves = this.getValidMoves(piece, { i, j }, board);
+                        for (const move of pieceMoves) {
+                            moves.push({
+                                from: { i, j },
+                                to: move,
+                                score: this.evaluateMove(board, { i, j }, move)
+                            });
+                        }
+                    }
+                }
+            }
+            // Sắp xếp nước đi theo điểm số
+            return moves.sort((a, b) => b.score - a.score);
+        },
+
+        // Đánh giá một nước đi cụ thể
+        evaluateMove(board, from, to) {
+            let score = 0;
+            const piece = board[from.i][from.j];
+            const targetPiece = board[to.i][to.j];
+
+            // Điểm cho việc ăn quân
+            if (targetPiece.id) {
+                const targetType = targetPiece.id.replace('do', '').replace('den', '');
+                score += pieceValues[targetType] * 10;
+            }
+
+            // Điểm cho việc di chuyển đến vị trí tốt
+            score += this.getPositionalBonus(piece.id, to, piece.id.includes('do'));
+
+            // Điểm cho việc tấn công
+            score += this.evaluateAttack(board, to) * 5;
+
+            // Điểm cho việc phòng thủ
+            score += this.evaluateDefense(board, from, to) * 3;
+
+            return score;
+        },
+
+        // Đánh giá khả năng tấn công của một nước đi
+        evaluateAttack(board, pos) {
+            let score = 0;
+            const opponentKingPos = this.findKingPosition(board, !board[pos.i][pos.j].id.includes('do'));
+
+            if (opponentKingPos) {
+                // Thưởng cho việc tiếp cận vua đối phương
+                const distance = this.getManhattanDistance(pos, opponentKingPos);
+                score += (14 - distance) * 2;
+            }
+
+            return score;
+        },
+
+        // Đánh giá khả năng phòng thủ của một nước đi
+        evaluateDefense(board, from, to) {
+            let score = 0;
+            const ownKingPos = this.findKingPosition(board, board[from.i][from.j].id.includes('do'));
+
+            if (ownKingPos) {
+                // Thưởng cho việc bảo vệ vua của mình
+                const oldDistance = this.getManhattanDistance(from, ownKingPos);
+                const newDistance = this.getManhattanDistance(to, ownKingPos);
+
+                if (newDistance < oldDistance) {
+                    score += 5;
+                }
+            }
+
+            return score;
+        },
+
+        // Hàm tìm nước đi tốt nhất với iterative deepening
+        getBestMove(board, aiColor, timeLimit = 3000) {
+            const startTime = Date.now();
+            let bestMove = null;
+            let depth = 1;
+
+            while (Date.now() - startTime < timeLimit) {
+                const move = this.findBestMoveAtDepth(board, depth, aiColor);
+                if (move) {
+                    bestMove = move;
+                }
+                depth++;
+            }
+
+            return bestMove;
+        },
+        // Tìm nước đi tốt nhất ở độ sâu cụ thể
+        findBestMoveAtDepth(board, depth, aiColor) {
+            const isMaximizing = aiColor === 'do';
+            let bestMove = null;
+            let bestValue = isMaximizing ? -Infinity : Infinity;
+
+            const moves = this.getAllMovesOrdered(board, aiColor);
+
+            for (const move of moves) {
+                const newBoard = this.makeMove(board, move);
+                const value = this.minimax(newBoard, depth - 1, -Infinity, Infinity, !isMaximizing, this.getOppositeColor(aiColor));
+
+                if (isMaximizing && value > bestValue) {
+                    bestValue = value;
+                    bestMove = move;
+                } else if (!isMaximizing && value < bestValue) {
+                    bestValue = value;
+                    bestMove = move;
+                }
+            }
+
+            return bestMove;
+        },
+
+        // Helper functions
+        makeMove(board, move) {
+            const newBoard = JSON.parse(JSON.stringify(board));
+            newBoard[move.to.i][move.to.j] = newBoard[move.from.i][move.from.j];
+            newBoard[move.from.i][move.from.j] = { id: '' };
+            return newBoard;
+        },
+
+        getOppositeColor(color) {
+            return color === 'do' ? 'den' : 'do';
+        },
+        // Kiểm tra xem một vua có đang bị chiếu không
+        isKingInCheck(board, isRedKing) {
+            const kingPos = this.findKingPosition(board, isRedKing);
+            if (!kingPos) return false;
+
+            const opponentColor = isRedKing ? 'den' : 'do';
+            const opponentMoves = this.getAllMoves(board, opponentColor);
+
+            return opponentMoves.some(move =>
+                move.to.i === kingPos.i && move.to.j === kingPos.j
+            );
+        },
+
+        // Kiểm tra xem một nước đi có thoát khỏi bị chiếu không
+        doesMovePreventCheck(board, move, isRedTurn) {
+            // Tạo bản sao của bàn cờ và thử nước đi
+            const newBoard = this.makeMove(board, move);
+            // Kiểm tra xem sau nước đi, vua có còn bị chiếu không
+            return !this.isKingInCheck(newBoard, isRedTurn);
+        },
+
+        // Lấy tất cả nước đi hợp lệ có thể tránh chiếu
+        getLegalMovesUnderCheck(board, isRedTurn) {
+            const allMoves = this.getAllMoves(board, isRedTurn ? 'do' : 'den');
+            return allMoves.filter(move => this.doesMovePreventCheck(board, move, isRedTurn));
+        },
+
+        // Kiểm tra chiếu bí
+        isCheckmate(board, isRedTurn) {
+            // Nếu vua không bị chiếu, không thể là chiếu bí
+            if (!this.isKingInCheck(board, isRedTurn)) {
+                return false;
+            }
+
+            // Kiểm tra xem có nước đi nào có thể thoát khỏi chiếu không
+            const legalMoves = this.getLegalMovesUnderCheck(board, isRedTurn);
+            return legalMoves.length === 0;
+        },
+
+        // Kiểm tra xem một quân cờ có thể cản được đường chiếu không
+        canBlockCheck(board, checkingPiece, kingPos, defendingColor) {
+            // Lấy đường đi từ quân chiếu đến vua
+            const path = this.getPathBetween(checkingPiece.pos, kingPos);
+
+            // Lấy tất cả nước đi có thể của quân phòng thủ
+            const defensiveMoves = this.getAllMoves(board, defendingColor);
+
+            // Kiểm tra xem có nước đi nào có thể chặn đường chiếu
+            return defensiveMoves.some(move =>
+                path.some(square =>
+                    square.i === move.to.i && square.j === move.to.j
+                )
+            );
+        },
+
+        // Lấy các ô nằm giữa hai vị trí (dùng cho xe và pháo)
+        getPathBetween(from, to) {
+            const path = [];
+
+            // Nếu cùng hàng
+            if (from.i === to.i) {
+                const start = Math.min(from.j, to.j);
+                const end = Math.max(from.j, to.j);
+                for (let j = start + 1; j < end; j++) {
+                    path.push({ i: from.i, j });
+                }
+            }
+            // Nếu cùng cột
+            else if (from.j === to.j) {
+                const start = Math.min(from.i, to.i);
+                const end = Math.max(from.i, to.i);
+                for (let i = start + 1; i < end; i++) {
+                    path.push({ i, j: from.j });
+                }
+            }
+
+            return path;
+        },
+        // Kiểm tra nước đi hợp lệ có tính đến luật chiếu
+        isValidMove(piece, from, to, board) {
+            // Kiểm tra nước đi cơ bản
+            const basicValidMoves = this.getValidMoves(piece, from, board);
+            if (!basicValidMoves.some(move => move.i === to.i && move.j === to.j)) {
+                return false;
+            }
+
+            // Thử nước đi và kiểm tra xem có để vua bị chiếu không
+            const isRedPiece = piece.id.includes('do');
+            const newBoard = this.makeMove(board, { from, to });
+            return !this.isKingInCheck(newBoard, isRedPiece);
+        },
+        // Cập nhật hàm đánh giá bàn cờ để tính đến chiếu và chiếu bí
+        evaluateBoardWithCheck(board, depth) {
+            let score = this.evaluateBoard(board, depth);
+
+            // Thêm điểm cho tình huống chiếu
+            if (this.isKingInCheck(board, true)) { // Vua đỏ bị chiếu
+                score -= 500;
+            }
+            if (this.isKingInCheck(board, false)) { // Vua đen bị chiếu
+                score += 500;
+            }
+
+            // Thêm điểm cho tình huống chiếu bí
+            if (this.isCheckmate(board, true)) { // Vua đỏ bị chiếu bí
+                score -= 1000;
+            }
+            if (this.isCheckmate(board, false)) { // Vua đen bị chiếu bí
+                score += 1000;
+            }
+
+            return score;
+        },
+
+
+        // Cập nhật makeAIMove để sử dụng AI mới
+        makeAIMove() {
+            if (this.currentTurn === this.aiColor && this.playWithAI && !this.gameOver) {
+                console.log("AI đang tính toán nước đi...");
+
+                // Tạo bản sao của bàn cờ hiện tại
+                const currentBoard = JSON.parse(JSON.stringify(matrix));
+
+                // Lấy nước đi tốt nhất từ AI
+                const bestMove = this.getBestMove(currentBoard, this.aiColor);
+
+                if (bestMove) {
+                    console.log("AI đã chọn nước đi:", bestMove);
+
+                    // Kiểm tra xem có quân cờ bị ăn không
+                    let objRemove = null;
+                    if (matrix[bestMove.to.i][bestMove.to.j].id !== "") {
+                        objRemove = {
+                            id: matrix[bestMove.to.i][bestMove.to.j].id
+                        };
+                    }
+
+                    // Chuẩn bị dữ liệu nước đi
+                    const moveData = [{
+                        id: matrix[bestMove.from.i][bestMove.from.j].id,
+                        fromi: bestMove.from.i,
+                        fromj: bestMove.from.j,
+                        toi: bestMove.to.i,
+                        toj: bestMove.to.j
+                    }];
+
+                    if (objRemove) {
+                        moveData.push(objRemove);
+                    }
+
+                    // Cập nhật bàn cờ
+                    let params = new URL(document.location.toString()).searchParams;
+                    let roomId = params.get("roomId");
+
+                    // Gửi nước đi lên server
+                    axios({
+                        url: '/api/chess/move-check-node?roomId=' + roomId,
+                        method: 'Post',
+                        responseType: 'json',
+                        data: moveData
+                    }).then((response) => {
+                        // Thực hiện di chuyển trên giao diện
+                        matrix[bestMove.from.i][bestMove.from.j].id = "";
+                        matrix[bestMove.to.i][bestMove.to.j].id = moveData[0].id;
+
+                        const piece = document.getElementById(moveData[0].id);
+                        piece.style.top = matrix[bestMove.to.i][bestMove.to.j].top + 'px';
+                        piece.style.left = matrix[bestMove.to.i][bestMove.to.j].left + 'px';
+
+                        // Xử lý quân bị ăn
+                        if (objRemove) {
+                            const capturedPiece = document.getElementById(objRemove.id);
+                            if (capturedPiece) {
+                                capturedPiece.style.display = "none";
+                            }
+                        }
+
+                        // Kiểm tra chiến thắng
+                        if (this.checkVictory() || this.checkKingsFaceToFace()) {
+                            let winnerText = this.winner === 'do' ? 'ĐỎ' : 'ĐEN';
+                            alert(`Người chơi ${winnerText} đã chiến thắng!`);
+                            connection.invoke("SendGameOver", roomId, this.winner)
+                                .catch(err => console.error(err.toString()));
+                        } else {
+                            // Chuyển lượt
+                            this.currentTurn = this.currentTurn === 'do' ? 'den' : 'do';
+
+                            // Gửi thông tin nước đi qua SignalR
+                            let moveInfo = {
+                                move: moveData,
+                                nextTurn: this.currentTurn
+                            };
+                            connection.invoke("SendChessMove", JSON.stringify(moveInfo))
+                                .catch(err => console.error(err.toString()));
+                        }
+                    }).catch(err => console.error("Lỗi khi thực hiện nước đi của AI:", err));
+                } else {
+                    console.error("AI không tìm được nước đi hợp lệ");
+                }
+            }
+        },
+
 
 
         // Đánh giá điểm của bàn cờ
@@ -1164,7 +1904,15 @@ var app = new Vue({
         this.getChessNode();
         let params = new URL(document.location.toString()).searchParams;
         let roomId = params.get("roomId");
+        // Thêm event listener cho button tải lại bàn cờ
+        document.getElementById("resetBoard").addEventListener("click", () => {
+            this.resetBoard();
 
+            // Nếu đang trong phòng, thông báo cho người chơi khác
+            if (currentRoomId) {
+                connection.invoke("SendMessage", currentRoomId, playerId, "Bàn cờ đã được thiết lập lại").catch(err => console.error(err.toString()));
+            }
+        });
         // Lắng nghe sự kiện nhận nước đi từ server
         connection.on("ReceiveChessMove", (message) => {
             let moveInfo = JSON.parse(message);
@@ -1196,6 +1944,9 @@ var app = new Vue({
 
 // Thêm sự kiện click cho nút "Play with AI"
 document.getElementById("playWithAI").addEventListener("click", function () {
+    // Sửa lại this.resetBoard() thành app.resetBoard() vì this ở đây không phải là Vue instance
+    app.resetBoard();
+
     app.playWithAI = !app.playWithAI;
     document.getElementById("messages").innerText = app.playWithAI
         ? "Chế độ chơi với AI đã được bật. AI sẽ chơi màu đỏ."
@@ -1223,6 +1974,8 @@ let playerId = prompt("Enter your Player ID:");
 document.getElementById("joinRoom").addEventListener("click", async () => {
     currentRoomId = document.getElementById("roomIdInput").value;
     await connection.invoke("JoinRoom", currentRoomId, playerId);
+    // Reset bàn cờ khi tham gia phòng mới
+    app.resetBoard();
 });
 
 document.getElementById("leaveRoom").addEventListener("click", async () => {
@@ -1230,6 +1983,8 @@ document.getElementById("leaveRoom").addEventListener("click", async () => {
         await connection.invoke("LeaveRoom", currentRoomId, playerId);
         currentRoomId = null;
         document.getElementById("messages").innerText = "You have left the room.";
+        // Reset bàn cờ khi rời phòng
+        app.resetBoard();
     }
 });
 
@@ -1246,4 +2001,5 @@ connection.on("ReceiveMessage", (message) => {
     messagesDiv.innerHTML += `<p>${message}</p>`;
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
 });
+
 
