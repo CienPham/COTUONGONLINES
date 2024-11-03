@@ -15,6 +15,10 @@ const pieceValues = {
     'phao': 450,       // Pháo
     'tot': 100         // Tốt
 };
+const positionEvalCache = new Map();
+const threatCache = new Map();
+const evaluationCache = new Map();
+
 var matrix = [];
 var app = new Vue({
     el: '#app',
@@ -22,13 +26,13 @@ var app = new Vue({
         chessNode: [],
         top: 0,
         left: 0,
-        currentTurn: 'do', 
+        currentTurn: 'do',
         gameOver: false,
         winner: null,
         isRedKingAlive: true,
         isBlackKingAlive: true,
         playWithAI: false, // Xác định chơi với AI hay người
-       
+
         aiColor: 'do' // Màu mặc định của AI là đỏ
     },
     methods: {
@@ -149,7 +153,7 @@ var app = new Vue({
                 // Nếu hai tướng đối mặt, xác định bên thắng
                 this.gameOver = true;
                 this.winner = this.currentTurn === 'do' ? 'den' : 'do';
-                alert(`Chiến thắng: ${this.winner}`);
+                console.log(`Chiến thắng: ${this.winner}`);
                 return true;
             }
             return false;
@@ -162,7 +166,7 @@ var app = new Vue({
 
             if ((this.currentTurn === 'do' && !isRedPiece) ||
                 (this.currentTurn === 'den' && !isBlackPiece)) {
-                alert('Lỗi: Chưa đến lượt của bạn');
+                console.log('Lỗi: Chưa đến lượt của bạn');
                 return false;
             }
             return true;
@@ -170,7 +174,7 @@ var app = new Vue({
 
         dragStart(event) {
             if (this.gameOver) {
-                alert('Trò chơi đã kết thúc!');
+                console.log('Trò chơi đã kết thúc!');
                 return;
             }
 
@@ -223,19 +227,19 @@ var app = new Vue({
                 }
                 if ((gapI == 1 && gapJ == 2) && (nodeEnd.j < nodeStart.j)) {
                     if (matrix[nodeStart.i][nodeStart.j - 1].id != "") {
-                        al.log('Lỗi: Mã bị chặn khi đi ngang trái');
+                        console.log('Lỗi: Mã bị chặn khi đi ngang trái');
                         return;
                     }
                 }
                 if ((gapI == 2 && gapJ == 1) && (nodeEnd.i > nodeStart.i)) {
                     if (matrix[nodeStart.i + 1][nodeStart.j].id != "") {
-                        alert('Lỗi: Mã bị chặn khi đi xuống');
+                        console.log('Lỗi: Mã bị chặn khi đi xuống');
                         return;
                     }
                 }
                 if ((gapI == 2 && gapJ == 1) && (nodeEnd.i < nodeStart.i)) {
                     if (matrix[nodeStart.i - 1][nodeStart.j].id != "") {
-                        alert('Lỗi: Mã bị chặn khi đi lên');
+                        console.log('Lỗi: Mã bị chặn khi đi lên');
                         return;
                     }
                 }
@@ -245,11 +249,11 @@ var app = new Vue({
             else if (id.indexOf('xe') >= 0) {
                 console.log('===== Kiểm tra nước đi quân XE =====');
                 if (!(nodeStart.i === nodeEnd.i || nodeStart.j === nodeEnd.j)) {
-                    alert('Lỗi: Xe chỉ được đi ngang hoặc dọc');
+                    console.log('Lỗi: Xe chỉ được đi ngang hoặc dọc');
                     return;
                 }
                 if (!this.isPathClear(nodeStart, nodeEnd, matrix)) {
-                    alert('Lỗi: Đường đi của Xe bị cản bởi quân khác');
+                    console.log('Lỗi: Đường đi của Xe bị cản bởi quân khác');
                     return;
                 }
                 console.log('Nước đi hợp lệ cho quân Xe');
@@ -258,13 +262,13 @@ var app = new Vue({
             else if (id.indexOf('phao') >= 0) {
                 console.log('===== Kiểm tra nước đi quân PHÁO =====');
                 if (!(nodeStart.i === nodeEnd.i || nodeStart.j === nodeEnd.j)) {
-                    alert('Lỗi: Pháo chỉ được đi ngang hoặc dọc');
+                    console.log('Lỗi: Pháo chỉ được đi ngang hoặc dọc');
                     return;
                 }
                 var piecesBetween = this.countPiecesBetween(nodeStart, nodeEnd, matrix);
                 if (nodeEnd.id !== "") { // Nếu điểm đến có quân (ăn quân)
                     if (piecesBetween !== 1) {
-                        alert('Lỗi: Pháo cần đúng 1 quân để ăn quân (hiện có ' + piecesBetween + ' quân)');
+                        console.log('Lỗi: Pháo cần đúng 1 quân để ăn quân (hiện có ' + piecesBetween + ' quân)');
                         return;
                     }
                 }
@@ -275,18 +279,18 @@ var app = new Vue({
                 console.log('===== Kiểm tra nước đi quân SĨ =====');
                 // Kiểm tra di chuyển chéo 1 ô
                 if (!(Math.abs(nodeEnd.i - nodeStart.i) === 1 && Math.abs(nodeEnd.j - nodeStart.j) === 1)) {
-                    alert('Lỗi: Sĩ chỉ được đi chéo 1 ô');
+                    console.log('Lỗi: Sĩ chỉ được đi chéo 1 ô');
                     return;
                 }
                 // Kiểm tra phạm vi cung
                 if (id.indexOf('do') >= 0) { // Sĩ đỏ
                     if (!(nodeEnd.i >= 0 && nodeEnd.i <= 2 && nodeEnd.j >= 3 && nodeEnd.j <= 5)) {
-                        alert('Lỗi: Sĩ phải đi trong phạm vi cung');
+                        console.log('Lỗi: Sĩ phải đi trong phạm vi cung');
                         return;
                     }
                 } else { // Sĩ đen
                     if (!(nodeEnd.i >= 7 && nodeEnd.i <= 9 && nodeEnd.j >= 3 && nodeEnd.j <= 5)) {
-                        alert('Lỗi: Sĩ phải đi trong phạm vi cung');
+                        console.log('Lỗi: Sĩ phải đi trong phạm vi cung');
                         return;
                     }
                 }
@@ -297,24 +301,24 @@ var app = new Vue({
                 console.log('===== Kiểm tra nước đi quân TƯỢNG =====');
                 // Kiểm tra di chuyển chéo 2 ô
                 if (!(Math.abs(nodeEnd.i - nodeStart.i) === 2 && Math.abs(nodeEnd.j - nodeStart.j) === 2)) {
-                    alert('Lỗi: Tượng phải đi chéo 2 ô');
+                    console.log('Lỗi: Tượng phải đi chéo 2 ô');
                     return;
                 }
                 // Kiểm tra chặn tượng
                 var midPoint = matrix[(nodeStart.i + nodeEnd.i) / 2][(nodeStart.j + nodeEnd.j) / 2];
                 if (midPoint.id !== "") {
-                    alert('Lỗi: Tượng bị chặn ở điểm giữa');
+                    console.log('Lỗi: Tượng bị chặn ở điểm giữa');
                     return;
                 }
                 // Kiểm tra qua sông
                 if (id.indexOf('do') >= 0) { // Tượng đỏ
                     if (nodeEnd.i > 4) {
-                        alert('Lỗi: Tượng không được qua sông');
+                        console.log('Lỗi: Tượng không được qua sông');
                         return;
                     }
                 } else { // Tượng đen
                     if (nodeEnd.i < 5) {
-                        alert('Lỗi: Tượng không được qua sông');
+                        console.log('Lỗi: Tượng không được qua sông');
                         return;
                     }
                 }
@@ -326,18 +330,18 @@ var app = new Vue({
                 // Kiểm tra di chuyển 1 ô theo chiều dọc hoặc ngang
                 if (!((Math.abs(nodeEnd.i - nodeStart.i) === 1 && nodeEnd.j === nodeStart.j) ||
                     (Math.abs(nodeEnd.j - nodeStart.j) === 1 && nodeEnd.i === nodeStart.i))) {
-                    alert('Lỗi: Tướng chỉ được đi 1 ô theo chiều dọc hoặc ngang');
+                    console.log('Lỗi: Tướng chỉ được đi 1 ô theo chiều dọc hoặc ngang');
                     return;
                 }
                 // Kiểm tra phạm vi cung
                 if (id.indexOf('do') >= 0) { // Tướng đỏ
                     if (!(nodeEnd.i >= 0 && nodeEnd.i <= 2 && nodeEnd.j >= 3 && nodeEnd.j <= 5)) {
-                        alert('Lỗi: Tướng phải đi trong phạm vi cung');
+                        console.log('Lỗi: Tướng phải đi trong phạm vi cung');
                         return;
                     }
                 } else { // Tướng đen
                     if (!(nodeEnd.i >= 7 && nodeEnd.i <= 9 && nodeEnd.j >= 3 && nodeEnd.j <= 5)) {
-                        alert('Lỗi: Tướng phải đi trong phạm vi cung');
+                        console.log('Lỗi: Tướng phải đi trong phạm vi cung');
                         return;
                     }
                 }
@@ -352,12 +356,12 @@ var app = new Vue({
                     if (nodeStart.i < 5) { // Nếu quân tốt đen đã qua sông
                         if (!(nodeStart.j === nodeEnd.j && nodeEnd.i === nodeStart.i - 1 || // Đi thẳng
                             nodeStart.i === nodeEnd.i && Math.abs(nodeStart.j - nodeEnd.j) === 1)) { // Đi ngang
-                            alert('Lỗi: Tốt đen đã qua sông chỉ được đi ngang 1 bước hoặc tiến 1 bước');
+                            console.log('Lỗi: Tốt đen đã qua sông chỉ được đi ngang 1 bước hoặc tiến 1 bước');
                             return;
                         }
                     } else {
                         if (!(nodeStart.j === nodeEnd.j && nodeEnd.i === nodeStart.i - 1)) { // Chỉ được đi thẳng
-                            alert('Lỗi: Tốt đen chưa qua sông chỉ được đi thẳng tiến 1 bước');
+                            console.log('Lỗi: Tốt đen chưa qua sông chỉ được đi thẳng tiến 1 bước');
                             return;
                         }
                     }
@@ -368,12 +372,12 @@ var app = new Vue({
                     if (nodeStart.i > 4) { // Nếu quân tốt đỏ đã qua sông
                         if (!(nodeStart.j === nodeEnd.j && nodeEnd.i === nodeStart.i + 1 || // Đi thẳng
                             nodeStart.i === nodeEnd.i && Math.abs(nodeStart.j - nodeEnd.j) === 1)) { // Đi ngang
-                            alert('Lỗi: Tốt đỏ đã qua sông chỉ được đi ngang 1 bước hoặc tiến 1 bước');
+                            console.log('Lỗi: Tốt đỏ đã qua sông chỉ được đi ngang 1 bước hoặc tiến 1 bước');
                             return;
                         }
                     } else {
                         if (!(nodeStart.j === nodeEnd.j && nodeEnd.i === nodeStart.i + 1)) { // Chỉ được đi thẳng
-                            alert('Lỗi: Tốt đỏ chưa qua sông chỉ được đi thẳng tiến 1 bước');
+                            console.log('Lỗi: Tốt đỏ chưa qua sông chỉ được đi thẳng tiến 1 bước');
                             return;
                         }
                     }
@@ -385,7 +389,7 @@ var app = new Vue({
                 // Kiểm tra ăn quân cùng màu
                 if ((id.indexOf('do') >= 0 && nodeEnd.id.indexOf('do') >= 0) ||
                     (id.indexOf('den') >= 0 && nodeEnd.id.indexOf('den') >= 0)) {
-                    alert('Lỗi: Không thể ăn quân cùng màu');
+                    console.log('Lỗi: Không thể ăn quân cùng màu');
                     return;
                 } else {
                     console.log('Ăn quân:', nodeEnd.id);
@@ -437,9 +441,9 @@ var app = new Vue({
                 }
             });
         },
-       
 
-       
+
+
         getValidMoves(piece, position, board) {
             const moves = [];
             const { i: startI, j: startJ } = position;
@@ -589,119 +593,469 @@ var app = new Vue({
         },
 
 
-            // Đánh giá điểm của bàn cờ
-            evaluateBoard(board) {
-                let score = 0;
+        // Đánh giá điểm của bàn cờ
+        // Đánh giá bàn cờ với trọng số và các yếu tố chiến thuật
+        evaluateBoard(board, depth) {
+            const cacheKey = this.getBoardHash(board) + depth;
+            if (evaluationCache.has(cacheKey)) {
+                return evaluationCache.get(cacheKey);
+            }
 
-                for (let i = 0; i < 10; i++) {
-                    for (let j = 0; j < 9; j++) {
-                        const piece = board[i][j];
-                        if (piece.id) {
-                            const isRed = piece.id.includes('do');
-                            const pieceType = piece.id.replace('do', '').replace('den', '');
-                            const value = pieceValues[pieceType] || 0;
+            let score = 0;
+            let redMaterial = 0;
+            let blackMaterial = 0;
+            let redMobility = 0;
+            let blackMobility = 0;
+            let redControl = 0;
+            let blackControl = 0;
 
-                            score += isRed ? value : -value;
-                        }
-                    }
-                }
-
-                return score;
-            },
-
-            // Thuật toán minimax với alpha-beta pruning
-            minimax(board, depth, alpha, beta, maximizingPlayer) {
-                if (depth === 0 || this.checkVictory()) {
-                    return this.evaluateBoard(board);
-                }
-
-                if (maximizingPlayer) {
-                    let maxEval = -Infinity;
-                    for (let i = 0; i < 10; i++) {
-                        for (let j = 0; j < 9; j++) {
-                            const piece = board[i][j];
-                            if (piece.id && piece.id.includes('do')) {
-                                const moves = this.getValidMoves(piece, { i, j }, board);
-
-                                for (const move of moves) {
-                                    // Tạo bản sao của bàn cờ
-                                    const newBoard = JSON.parse(JSON.stringify(board));
-                                    // Thực hiện nước đi
-                                    newBoard[move.i][move.j] = newBoard[i][j];
-                                    newBoard[i][j] = { id: '' };
-
-                                    const evalScore = this.minimax(newBoard, depth - 1, alpha, beta, false);
-                                    maxEval = Math.max(maxEval, evalScore);
-                                    alpha = Math.max(alpha, evalScore);
-                                    if (beta <= alpha)
-                                        break;
-                                }
-                            }
-                        }
-                    }
-                    return maxEval;
-                } else {
-                    let minEval = Infinity;
-                    for (let i = 0; i < 10; i++) {
-                        for (let j = 0; j < 9; j++) {
-                            const piece = board[i][j];
-                            if (piece.id && piece.id.includes('den')) {
-                                const moves = this.getValidMoves(piece, { i, j }, board);
-
-                                for (const move of moves) {
-                                    const newBoard = JSON.parse(JSON.stringify(board));
-                                    newBoard[move.i][move.j] = newBoard[i][j];
-                                    newBoard[i][j] = { id: '' };
-
-                                    const evalScore = this.minimax(newBoard, depth - 1, alpha, beta, true);
-                                    minEval = Math.min(minEval, evalScore);
-                                    beta = Math.min(beta, evalScore);
-                                    if (beta <= alpha)
-                                        break;
-                                }
-                            }
-                        }
-                    }
-                    return minEval;
-                }
-            },
-
-            // Hàm tìm nước đi tốt nhất cho AI
-        getBestMove(board, aiColor) {
-            let bestMove = null;
-            let bestValue = aiColor === 'do' ? -Infinity : Infinity;
-            const isMaximizing = aiColor === 'do';
-
+            // Phân tích vật chất và vị trí
             for (let i = 0; i < 10; i++) {
                 for (let j = 0; j < 9; j++) {
                     const piece = board[i][j];
-                    if (piece && piece.id && piece.id.includes(aiColor)) {  // Added check for piece
+                    if (!piece.id) continue;
+
+                    const isRed = piece.id.includes('do');
+                    const pieceType = piece.id.replace('do', '').replace('den', '');
+                    const baseValue = pieceValues[pieceType] || 0;
+
+                    // Tính điểm vật chất
+                    const materialScore = baseValue + this.getPositionalBonus(pieceType, { i, j }, isRed);
+                    if (isRed) {
+                        redMaterial += materialScore;
+                        redMobility += this.calculateMobility(board, { i, j }, true);
+                        redControl += this.calculateControl(board, { i, j }, true);
+                    } else {
+                        blackMaterial += materialScore;
+                        blackMobility += this.calculateMobility(board, { i, j }, false);
+                        blackControl += this.calculateControl(board, { i, j }, false);
+                    }
+                }
+            }
+
+            // Tổng hợp điểm với trọng số
+            score = (redMaterial - blackMaterial) * 1.0 +  // Trọng số vật chất
+                (redMobility - blackMobility) * 0.1 +  // Trọng số tính cơ động
+                (redControl - blackControl) * 0.2;      // Trọng số kiểm soát
+
+            // Thưởng cho giai đoạn cuối game
+            if (this.isEndgame(redMaterial, blackMaterial)) {
+                score += this.evaluateEndgame(board, redMaterial > blackMaterial);
+            }
+
+            // Cache kết quả
+            evaluationCache.set(cacheKey, score);
+            return score;
+        },
+
+        // Tính toán khả năng di chuyển của quân cờ
+        calculateMobility(board, pos, isRed) {
+            const piece = board[pos.i][pos.j];
+            const moves = this.getValidMoves(piece, pos, board);
+            return moves.length;
+        },
+
+        // Tính toán mức độ kiểm soát ô trên bàn cờ
+        calculateControl(board, pos, isRed) {
+            const piece = board[pos.i][pos.j];
+            const moves = this.getValidMoves(piece, pos, board);
+            let control = 0;
+
+            for (const move of moves) {
+                // Kiểm soát trung tâm được thưởng điểm cao hơn
+                const centerBonus = this.isCentralSquare(move) ? 2 : 1;
+                control += centerBonus;
+
+                // Thưởng thêm cho việc kiểm soát các ô quan trọng
+                if (this.isKeySquare(move, isRed)) {
+                    control += 3;
+                }
+            }
+
+            return control;
+        },
+
+        // Kiểm tra ô có phải trung tâm
+        isCentralSquare(pos) {
+            return pos.i >= 3 && pos.i <= 6 && pos.j >= 3 && pos.j <= 5;
+        }
+        ,
+        // Kiểm tra ô quan trọng (gần tướng đối phương)
+        isKeySquare(pos, isRed) {
+            if (isRed) {
+                return pos.i <= 2 && pos.j >= 3 && pos.j <= 5;
+            } else {
+                return pos.i >= 7 && pos.j >= 3 && pos.j <= 5;
+            }
+        },
+
+        // Đánh giá giai đoạn cuối
+        evaluateEndgame(board, isRedWinning) {
+            let score = 0;
+            const winningKingPos = this.findKingPosition(board, isRedWinning);
+            const losingKingPos = this.findKingPosition(board, !isRedWinning);
+
+            // Thưởng cho việc đẩy vua đối phương vào góc
+            score += this.evaluateKingSafety(losingKingPos, !isRedWinning) * -2;
+
+            // Thưởng cho khoảng cách giữa hai vua
+            const kingDistance = this.getManhattanDistance(winningKingPos, losingKingPos);
+            score += (14 - kingDistance) * 10;
+
+            return score;
+        },
+
+        // Hàm tính điểm vị trí quân cờ
+        getPositionalBonus(pieceType, position, isRed) {
+            // Tính điểm dựa trên vị trí cho từng loại quân cờ (giá trị mẫu)
+            const positionValues = {
+                'totdo': [
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, -2, 0, 4, 0, -2, 0, 0],
+                    [2, 0, 8, 0, 8, 0, 8, 0, 2],
+                    [6, 12, 18, 18, 20, 18, 18, 12, 6],
+                    [10, 20, 30, 34, 40, 34, 30, 20, 10],
+                    [14, 26, 42, 60, 80, 60, 42, 26, 14],
+                    [18, 36, 56, 80, 120, 80, 56, 36, 18],
+                    [0, 3, 6, 9, 12, 9, 6, 3, 0]
+                ],
+                'totden': [
+                    [0, 3, 6, 9, 12, 9, 6, 3, 0],
+                    [18, 36, 56, 80, 120, 80, 56, 36, 18],
+                    [14, 26, 42, 60, 80, 60, 42, 26, 14],
+                    [10, 20, 30, 34, 40, 34, 30, 20, 10],
+                    [6, 12, 18, 18, 20, 18, 18, 12, 6],
+                    [2, 0, 8, 0, 8, 0, 8, 0, 2],
+                    [0, 0, -2, 0, 4, 0, -2, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0]
+                ],
+                'mado': [
+                    [0, -4, 0, 0, 0, 0, 0, -4, 0],
+                    [0, 2, 4, 4, -2, 4, 4, 2, 0],
+                    [4, 2, 8, 8, 4, 8, 8, 2, 4],
+                    [2, 6, 8, 6, 10, 6, 8, 6, 2],
+                    [4, 12, 16, 14, 12, 14, 16, 12, 4],
+                    [6, 16, 14, 18, 16, 18, 14, 16, 6],
+                    [8, 24, 18, 24, 20, 24, 18, 24, 8],
+                    [12, 14, 16, 20, 18, 20, 16, 14, 12],
+                    [4, 10, 28, 16, 8, 16, 28, 10, 4],
+                    [4, 8, 16, 12, 4, 12, 16, 8, 4]
+                ],
+                'maden': [
+                    [4, 8, 16, 12, 4, 12, 16, 8, 4],
+                    [4, 10, 28, 16, 8, 16, 28, 10, 4],
+                    [12, 14, 16, 20, 18, 20, 16, 14, 12],
+                    [8, 24, 18, 24, 20, 24, 18, 24, 8],
+                    [6, 16, 14, 18, 16, 18, 14, 16, 6],
+                    [4, 12, 16, 14, 12, 14, 16, 12, 4],
+                    [2, 6, 8, 6, 10, 6, 8, 6, 2],
+                    [4, 2, 8, 8, 4, 8, 8, 2, 4],
+                    [0, 2, 4, 4, -2, 4, 4, 2, 0],
+                    [0, -4, 0, 0, 0, 0, 0, -4, 0]
+                ],
+                'xedo': [
+                    [-2, 10, 6, 14, 12, 14, 6, 10, -2],
+                    [8, 4, 8, 16, 8, 16, 8, 4, 8],
+                    [4, 8, 6, 14, 12, 14, 6, 8, 4],
+                    [6, 10, 8, 14, 14, 14, 8, 10, 6],
+                    [12, 16, 14, 20, 20, 20, 14, 16, 12],
+                    [12, 14, 12, 18, 18, 18, 12, 14, 12],
+                    [12, 18, 16, 22, 22, 22, 16, 18, 12],
+                    [12, 12, 12, 18, 18, 18, 12, 12, 12],
+                    [16, 20, 18, 24, 26, 24, 18, 20, 16],
+                    [14, 14, 12, 18, 16, 18, 12, 14, 14]
+                ],
+                'xeden': [
+                    [14, 14, 12, 18, 16, 18, 12, 14, 14],
+                    [16, 20, 18, 24, 26, 24, 18, 20, 16],
+                    [12, 12, 12, 18, 18, 18, 12, 12, 12],
+                    [12, 18, 16, 22, 22, 22, 16, 18, 12],
+                    [12, 14, 12, 18, 18, 18, 12, 14, 12],
+                    [12, 16, 14, 20, 20, 20, 14, 16, 12],
+                    [6, 10, 8, 14, 14, 14, 8, 10, 6],
+                    [4, 8, 6, 14, 12, 14, 6, 8, 4],
+                    [8, 4, 8, 16, 8, 16, 8, 4, 8],
+                    [-2, 10, 6, 14, 12, 14, 6, 10, -2]
+                ],
+                'phaodo': [
+                    [0, 0, 2, 6, 6, 6, 2, 0, 0],
+                    [0, 2, 4, 6, 6, 6, 4, 2, 0],
+                    [4, 0, 8, 6, 10, 6, 8, 0, 4],
+                    [0, 0, 0, 2, 4, 2, 0, 0, 0],
+                    [-2, 0, 0, 0, 0, 0, 0, 0, -2],
+                    [-2, 0, 0, 0, 0, 0, 0, 0, -2],
+                    [0, 0, 0, 2, 4, 2, 0, 0, 0],
+                    [4, 0, 8, 6, 10, 6, 8, 0, 4],
+                    [0, 2, 4, 6, 6, 6, 4, 2, 0],
+                    [0, 0, 2, 6, 6, 6, 2, 0, 0]
+                ],
+                'phaoden': [
+                    [0, 0, 2, 6, 6, 6, 2, 0, 0],
+                    [0, 2, 4, 6, 6, 6, 4, 2, 0],
+                    [4, 0, 8, 6, 10, 6, 8, 0, 4],
+                    [0, 0, 0, 2, 4, 2, 0, 0, 0],
+                    [-2, 0, 0, 0, 0, 0, 0, 0, -2],
+                    [-2, 0, 0, 0, 0, 0, 0, 0, -2],
+                    [0, 0, 0, 2, 4, 2, 0, 0, 0],
+                    [4, 0, 8, 6, 10, 6, 8, 0, 4],
+                    [0, 2, 4, 6, 6, 6, 4, 2, 0],
+                    [0, 0, 2, 6, 6, 6, 2, 0, 0]
+                ]
+            };
+            return positionValues[pieceType] || 0;
+        },
+        // Hàm đánh giá mối đe dọa (tấn công và phòng thủ)
+        evaluateThreats(board, position, isRed) {
+            let threatScore = 0;
+            const opponentColor = isRed ? 'den' : 'do';
+
+            // Kiểm tra các nước đi của đối thủ để xác định quân nào đang bị đe dọa
+            const opponentMoves = this.getAllMoves(board, opponentColor);
+            for (const move of opponentMoves) {
+                if (move.to.i === position.i && move.to.j === position.j) {
+                    threatScore -= 10;  // Bị đe dọa
+                }
+            }
+
+            return threatScore;
+        },
+
+        // Hàm lấy tất cả nước đi của một bên
+        getAllMoves(board, color) {
+            let allMoves = [];
+            for (let i = 0; i < 10; i++) {
+                for (let j = 0; j < 9; j++) {
+                    const piece = board[i][j];
+                    if (piece.id && piece.id.includes(color)) {
                         const moves = this.getValidMoves(piece, { i, j }, board);
+                        allMoves = allMoves.concat(moves.map(move => ({ from: { i, j }, to: move })));
+                    }
+                }
+            }
+            return allMoves;
+        },
 
-                        for (const move of moves) {
-                            const newBoard = JSON.parse(JSON.stringify(board));
-                            newBoard[move.i][move.j] = newBoard[i][j];
-                            newBoard[i][j] = { id: '' };
+        // Tìm vị trí vua
+        findKingPosition(board, isRed) {
+            const kingId = isRed ? 'chutuongdo' : 'chutuongden';
+            for (let i = 0; i < 10; i++) {
+                for (let j = 0; j < 9; j++) {
+                    if (board[i][j].id === kingId) {
+                        return { i, j };
+                    }
+                }
+            }
+            return null;
+        },
 
-                            const value = this.minimax(newBoard, 3, -Infinity, Infinity, !isMaximizing);
+        // Tính khoảng cách Manhattan
+        getManhattanDistance(pos1, pos2) {
+            if (!pos1 || !pos2) {
+                console.error("One of the positions is null:", pos1, pos2);
+                return 0; // Hoặc giá trị mặc định mà bạn muốn
+            }
+            return Math.abs(pos1.i - pos2.i) + Math.abs(pos1.j - pos2.j);
+        },
 
-                            if (isMaximizing && value > bestValue) {
-                                bestValue = value;
-                                bestMove = { from: { i, j }, to: move };
-                            } else if (!isMaximizing && value < bestValue) {
-                                bestValue = value;
-                                bestMove = { from: { i, j }, to: move };
-                            }
+        // Đánh giá an toàn của vua
+        evaluateKingSafety(kingPos, isRed) {
+            // Kiểm tra xem kingPos có phải là null không
+            if (!kingPos) {
+                console.error("King position is null.");
+                return 0; // Hoặc giá trị an toàn mặc định
+            }
+            console.log("King Position:", kingPos);
+
+            let safety = 0;
+            const centerJ = 4;
+
+            // Khuyến khích vua ở sau các quân khác
+            safety += isRed ? (9 - kingPos.i) : kingPos.i;
+
+            // Khuyến khích vua ở gần trung tâm ngang
+            safety += 4 - Math.abs(kingPos.j - centerJ);
+
+            return safety;
+        },
+
+        // Kiểm tra giai đoạn cuối
+        isEndgame(redMaterial, blackMaterial) {
+            const totalMaterial = redMaterial + blackMaterial;
+            return totalMaterial < (pieceValues.xe * 4);  // Ví dụ: ít hơn 4 xe
+        },
+
+        // Tạo hash của bàn cờ để cache
+        getBoardHash(board) {
+            return board.map(row => row.map(cell => cell.id).join('')).join('');
+        },
+
+        // Minimax với alpha-beta pruning và move ordering
+        minimax(board, depth, alpha, beta, maximizingPlayer, color) {
+            // Base cases
+            if (depth === 0 || this.checkVictory(board)) {
+                return this.evaluateBoard(board, depth);
+            }
+
+            const moves = this.getAllMovesOrdered(board, color);
+
+            if (maximizingPlayer) {
+                let maxEval = -Infinity;
+                for (const move of moves) {
+                    const newBoard = this.makeMove(board, move);
+                    const evalScore = this.minimax(newBoard, depth - 1, alpha, beta, false, this.getOppositeColor(color));
+                    maxEval = Math.max(maxEval, evalScore);
+                    alpha = Math.max(alpha, evalScore);
+                    if (beta <= alpha) break;  // Alpha-beta cut-off
+                }
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                for (const move of moves) {
+                    const newBoard = this.makeMove(board, move);
+                    const evalScore = this.minimax(newBoard, depth - 1, alpha, beta, true, this.getOppositeColor(color));
+                    minEval = Math.min(minEval, evalScore);
+                    beta = Math.min(beta, evalScore);
+                    if (beta <= alpha) break;  // Alpha-beta cut-off
+                }
+                return minEval;
+            }
+        },
+        // Lấy tất cả nước đi và sắp xếp theo độ ưu tiên
+        getAllMovesOrdered(board, color) {
+            const moves = [];
+            for (let i = 0; i < 10; i++) {
+                for (let j = 0; j < 9; j++) {
+                    const piece = board[i][j];
+                    if (piece.id && piece.id.includes(color)) {
+                        const pieceMoves = this.getValidMoves(piece, { i, j }, board);
+                        for (const move of pieceMoves) {
+                            moves.push({
+                                from: { i, j },
+                                to: move,
+                                score: this.evaluateMove(board, { i, j }, move)
+                            });
                         }
                     }
+                }
+            }
+            // Sắp xếp nước đi theo điểm số
+            return moves.sort((a, b) => b.score - a.score);
+        },
+
+        // Đánh giá một nước đi cụ thể
+        evaluateMove(board, from, to) {
+            let score = 0;
+            const piece = board[from.i][from.j];
+            const targetPiece = board[to.i][to.j];
+
+            // Điểm cho việc ăn quân
+            if (targetPiece.id) {
+                const targetType = targetPiece.id.replace('do', '').replace('den', '');
+                score += pieceValues[targetType] * 10;
+            }
+
+            // Điểm cho việc di chuyển đến vị trí tốt
+            score += this.getPositionalBonus(piece.id, to, piece.id.includes('do'));
+
+            // Điểm cho việc tấn công
+            score += this.evaluateAttack(board, to) * 5;
+
+            // Điểm cho việc phòng thủ
+            score += this.evaluateDefense(board, from, to) * 3;
+
+            return score;
+        },
+
+        // Đánh giá khả năng tấn công của một nước đi
+        evaluateAttack(board, pos) {
+            let score = 0;
+            const opponentKingPos = this.findKingPosition(board, !board[pos.i][pos.j].id.includes('do'));
+
+            if (opponentKingPos) {
+                // Thưởng cho việc tiếp cận vua đối phương
+                const distance = this.getManhattanDistance(pos, opponentKingPos);
+                score += (14 - distance) * 2;
+            }
+
+            return score;
+        },
+
+        // Đánh giá khả năng phòng thủ của một nước đi
+        evaluateDefense(board, from, to) {
+            let score = 0;
+            const ownKingPos = this.findKingPosition(board, board[from.i][from.j].id.includes('do'));
+
+            if (ownKingPos) {
+                // Thưởng cho việc bảo vệ vua của mình
+                const oldDistance = this.getManhattanDistance(from, ownKingPos);
+                const newDistance = this.getManhattanDistance(to, ownKingPos);
+
+                if (newDistance < oldDistance) {
+                    score += 5;
+                }
+            }
+
+            return score;
+        },
+
+        // Hàm tìm nước đi tốt nhất với iterative deepening
+        getBestMove(board, aiColor, timeLimit = 3000) {
+            const startTime = Date.now();
+            let bestMove = null;
+            let depth = 1;
+
+            while (Date.now() - startTime < timeLimit) {
+                const move = this.findBestMoveAtDepth(board, depth, aiColor);
+                if (move) {
+                    bestMove = move;
+                }
+                depth++;
+            }
+
+            return bestMove;
+        },
+        // Tìm nước đi tốt nhất ở độ sâu cụ thể
+        findBestMoveAtDepth(board, depth, aiColor) {
+            const isMaximizing = aiColor === 'do';
+            let bestMove = null;
+            let bestValue = isMaximizing ? -Infinity : Infinity;
+
+            const moves = this.getAllMovesOrdered(board, aiColor);
+
+            for (const move of moves) {
+                const newBoard = this.makeMove(board, move);
+                const value = this.minimax(newBoard, depth - 1, -Infinity, Infinity, !isMaximizing, this.getOppositeColor(aiColor));
+
+                if (isMaximizing && value > bestValue) {
+                    bestValue = value;
+                    bestMove = move;
+                } else if (!isMaximizing && value < bestValue) {
+                    bestValue = value;
+                    bestMove = move;
                 }
             }
 
             return bestMove;
         },
 
+        // Helper functions
+        makeMove(board, move) {
+            const newBoard = JSON.parse(JSON.stringify(board));
+            newBoard[move.to.i][move.to.j] = newBoard[move.from.i][move.from.j];
+            newBoard[move.from.i][move.from.j] = { id: '' };
+            return newBoard;
+        },
 
-            // Cập nhật makeAIMove để sử dụng AI mới
+        getOppositeColor(color) {
+            return color === 'do' ? 'den' : 'do';
+        },
+
+
+        // Cập nhật makeAIMove để sử dụng AI mới
         makeAIMove() {
             if (this.currentTurn === this.aiColor && this.playWithAI && !this.gameOver) {
                 console.log("AI đang tính toán nước đi...");
@@ -713,7 +1067,7 @@ var app = new Vue({
                 const bestMove = this.getBestMove(currentBoard, this.aiColor);
 
                 if (bestMove) {
-                    alert("AI đã chọn nước đi:", bestMove);
+                    console.log("AI đã chọn nước đi:", bestMove);
 
                     // Kiểm tra xem có quân cờ bị ăn không
                     let objRemove = null;
@@ -787,7 +1141,7 @@ var app = new Vue({
                 }
             }
         },
-        
+
         applyMove(move) {
             // Cập nhật nước đi vào bàn cờ
             matrix[move.fromi][move.fromj].id = "";
@@ -803,8 +1157,8 @@ var app = new Vue({
                 capturedPiece.style.display = "none";
             }
         }
-    
-    
+
+
     },
     mounted: function () {
         this.getChessNode();
